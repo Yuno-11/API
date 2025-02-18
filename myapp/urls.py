@@ -1,6 +1,7 @@
 from django.urls import path
-from .views import PredictView
+from .views import florai,Restflorai
 
 urlpatterns = [
-    path('api/predict/', PredictView.as_view(), name='predict'),
+    path('api/', florai, name='predict'),
+    path('api/<int:pk>', Restflorai, name='predict')
 ]
