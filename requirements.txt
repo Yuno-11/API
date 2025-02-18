@@ -44,3 +44,4 @@ Werkzeug
 whitenoise
 wrapt
 gunicorn
+djangorestframework
