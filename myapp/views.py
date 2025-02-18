@@ -3,10 +3,8 @@ import numpy as np
 from io import BytesIO
 from PIL import Image
 import tensorflow as tf
+import psycopg2
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from django.http.response import JsonResponse, HttpResponse
-from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.decorators import api_view
 from rest_framework import status
 from .models import modelpredict
@@ -17,13 +15,27 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.h5")
 MODEL = tf.keras.models.load_model(MODEL_PATH)
 CLASS_NAMES = ["Early Blight", "Late Blight", "Healthy"]
 
-def read_file_as_image(data) -> np.ndarray:
-    """Read image data and preprocess for model input."""
-    image = Image.open(BytesIO(data)).convert("RGB")  # Ensure 3-channel RGB
-    image = image.resize((256, 256))  # Resize for model input
-    image = np.array(image) / 255.0  # Normalize pixel values
+# Database Connection
+def get_db_connection():
+    return psycopg2.connect(
+        dbname="railway",
+        user="postgres",
+        password="yqtCQhtupwWXcUgVJiQeuaUEkxcdmOuR",
+        host="turntable.proxy.rlwy.net",
+        port="56650"
+    )
+
+# Convert BYTEA to Image (for ESP32 Images)
+def convert_bytea_to_image(bytea_data):
+    return Image.open(BytesIO(bytea_data)).convert("RGB")
+
+# Read Image for Direct Upload & ESP32 Processing
+def process_image(image) -> np.ndarray:
+    image = image.resize((256, 256))  # Standard resizing
+    image = np.array(image) / 255.0   # Convert to NumPy array & normalize
     return np.expand_dims(image, axis=0)  # Add batch dimension
 
+# API for Direct Image Uploads & Predictions
 @api_view(['GET', 'POST'])
 def florai(request):
     if request.method == 'GET':
@@ -36,23 +48,69 @@ def florai(request):
             return Response({"error": "Image file is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         image_file = request.FILES['image']
-        image_array = read_file_as_image(image_file.read())
+        image_array = process_image(Image.open(image_file))
 
         # Make AI prediction
         predictions = MODEL.predict(image_array)
         predicted_class = CLASS_NAMES[np.argmax(predictions)]
-        confidence = float(np.max(predictions))
+        confidence = int(np.max(predictions) * 100)  # Convert to percentage
 
         # Save prediction to the database
         model_instance = modelpredict.objects.create(
             image=image_file,
             predict_class=predicted_class,
-            predict_accuracy=int(confidence * 100),
+            predict_accuracy=confidence,
             predicted=True
         )
 
         serializer = predictserializer(model_instance)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+# API for Fetching & Processing ESP32 Images
+@api_view(['GET'])
+def florai_esp32(request):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Fetch Unpredicted Images
+        cursor.execute("SELECT id, device_id, email, image FROM esp32_images WHERE predicted = FALSE LIMIT 1;")
+        image_data = cursor.fetchone()
+
+        if not image_data:
+            return Response({"message": "No unprocessed images found"}, status=status.HTTP_200_OK)
+
+        image_id, device_id, email, image_bytea = image_data
+        image = process_image(convert_bytea_to_image(image_bytea))
+
+        # Make AI Prediction
+        predictions = MODEL.predict(image)
+        predicted_class = CLASS_NAMES[np.argmax(predictions)]
+        confidence = int(np.max(predictions) * 100)  # Convert to percentage
+
+        # Update Database with Results
+        cursor.execute("""
+            UPDATE esp32_images
+            SET predict_class = %s, predict_accuracy = %s, predicted = TRUE
+            WHERE id = %s;
+        """, (predicted_class, confidence, image_id))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Return Prediction Result
+        return Response({
+            "id": image_id, # Return ID
+            "device_id": device_id, # Return ESP32 ID
+            "email": email if email else None,  # Return email only if available
+            "class": predicted_class, # Return predicted class
+            "confidence": confidence, # Return accurcy
+            "predicted": True # Return statement that the image is predicted
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def Restflorai(request, pk):
