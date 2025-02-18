@@ -45,3 +45,4 @@ whitenoise
 wrapt
 gunicorn
 djangorestframework
+Pillow
