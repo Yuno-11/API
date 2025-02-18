@@ -35,22 +35,24 @@ def florai(request):
         if 'image' not in request.FILES:
             return Response({"error": "Image file is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        image_file = request.FILES['image'].read()
-        image_array = read_file_as_image(image_file)
-        
+        image_file = request.FILES['image']
+        image_array = read_file_as_image(image_file.read())
+
         # Make AI prediction
         predictions = MODEL.predict(image_array)
         predicted_class = CLASS_NAMES[np.argmax(predictions)]
         confidence = float(np.max(predictions))
 
         # Save prediction to the database
-        serializer = predictserializer(data={"image": request.FILES['image'], "prediction": predicted_class, "confidence": confidence})
-        
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        model_instance = modelpredict.objects.create(
+            image=image_file,
+            predict_class=predicted_class,
+            predict_accuracy=int(confidence * 100),
+            predicted=True
+        )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = predictserializer(model_instance)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def Restflorai(request, pk):
