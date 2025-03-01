@@ -54,18 +54,19 @@ def florai(request):
             return Response({"error": "Base64 image is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            base64_string = request.data['image']
-            image = base64_to_image(base64_string)  # Convert Base64 to PIL Image
-            image_array = process_image(image)  # Convert image for model prediction
+            # Decode Base64 image
+            image_data = base64.b64decode(request.data['image'])
+            image = Image.open(BytesIO(image_data))
+            image_array = process_image(image)
 
             # Make AI prediction
             predictions = MODEL.predict(image_array)
             predicted_class = CLASS_NAMES[np.argmax(predictions)]
             confidence = int(np.max(predictions) * 100)
 
-            # Save prediction (store Base64 instead of file)
+            # Save prediction to the database
             model_instance = modelpredict.objects.create(
-                image=base64_string,  # Store base64 string in the database
+                image=request.data['image'],  # Store Base64 string instead of file
                 predict_class=predicted_class,
                 predict_accuracy=confidence,
                 predicted=True
@@ -76,6 +77,7 @@ def florai(request):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # API for Fetching & Processing ESP32 Images
 @api_view(['GET'])
