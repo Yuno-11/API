@@ -9,6 +9,7 @@ from rest_framework.decorators import api_view
 from rest_framework import status
 from .models import modelpredict
 from .serializer import predictserializer
+import base64
 
 # Load AI Model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.h5")
@@ -24,6 +25,11 @@ def get_db_connection():
         host="turntable.proxy.rlwy.net",
         port="56650"
     )
+
+def base64_to_image(base64_string):
+    """Convert base64 string to PIL Image"""
+    image_data = base64.b64decode(base64_string)
+    return Image.open(BytesIO(image_data)).convert("RGB")
 
 # Convert BYTEA to Image (for ESP32 Images)
 def convert_bytea_to_image(bytea_data):
@@ -44,27 +50,32 @@ def florai(request):
         return Response(serializer.data)
 
     if request.method == 'POST':
-        if 'image' not in request.FILES:
-            return Response({"error": "Image file is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if 'image' not in request.data:
+            return Response({"error": "Base64 image is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        image_file = request.FILES['image']
-        image_array = process_image(Image.open(image_file))
+        try:
+            base64_string = request.data['image']
+            image = base64_to_image(base64_string)  # Convert Base64 to PIL Image
+            image_array = process_image(image)  # Convert image for model prediction
 
-        # Make AI prediction
-        predictions = MODEL.predict(image_array)
-        predicted_class = CLASS_NAMES[np.argmax(predictions)]
-        confidence = int(np.max(predictions) * 100)  # Convert to percentage
+            # Make AI prediction
+            predictions = MODEL.predict(image_array)
+            predicted_class = CLASS_NAMES[np.argmax(predictions)]
+            confidence = int(np.max(predictions) * 100)
 
-        # Save prediction to the database
-        model_instance = modelpredict.objects.create(
-            image=image_file,
-            predict_class=predicted_class,
-            predict_accuracy=confidence,
-            predicted=True
-        )
+            # Save prediction (store Base64 instead of file)
+            model_instance = modelpredict.objects.create(
+                image=base64_string,  # Store base64 string in the database
+                predict_class=predicted_class,
+                predict_accuracy=confidence,
+                predicted=True
+            )
 
-        serializer = predictserializer(model_instance)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            serializer = predictserializer(model_instance)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # API for Fetching & Processing ESP32 Images
 @api_view(['GET'])
@@ -73,7 +84,7 @@ def florai_esp32(request):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Fetch Unpredicted Images
+        # Fetch an unpredicted image
         cursor.execute("SELECT id, device_id, email, image FROM esp32_images WHERE predicted = FALSE LIMIT 1;")
         image_data = cursor.fetchone()
 
@@ -81,14 +92,19 @@ def florai_esp32(request):
             return Response({"message": "No unprocessed images found"}, status=status.HTTP_200_OK)
 
         image_id, device_id, email, image_bytea = image_data
+
+        # Convert image from BYTEA to Base64
+        image_base64 = base64.b64encode(image_bytea).decode('utf-8')
+
+        # Process the image
         image = process_image(convert_bytea_to_image(image_bytea))
 
-        # Make AI Prediction
+        # Make AI prediction
         predictions = MODEL.predict(image)
         predicted_class = CLASS_NAMES[np.argmax(predictions)]
-        confidence = int(np.max(predictions) * 100)  # Convert to percentage
+        confidence = int(np.max(predictions) * 100)
 
-        # Update Database with Results
+        # Update Database
         cursor.execute("""
             UPDATE esp32_images
             SET predict_class = %s, predict_accuracy = %s, predicted = TRUE
@@ -99,14 +115,15 @@ def florai_esp32(request):
         cursor.close()
         conn.close()
 
-        # Return Prediction Result
+        # Return prediction result with Base64 image
         return Response({
-            "id": image_id, # Return ID
-            "device_id": device_id, # Return ESP32 ID
-            "email": email if email else None,  # Return email only if available
-            "class": predicted_class, # Return predicted class
-            "confidence": confidence, # Return accurcy
-            "predicted": True # Return statement that the image is predicted
+            "id": image_id,
+            "device_id": device_id,
+            "email": email if email else None,
+            "image": image_base64,  # Return the image as Base64
+            "class": predicted_class,
+            "confidence": confidence,
+            "predicted": True
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
