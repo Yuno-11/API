@@ -54,8 +54,13 @@ def florai(request):
             return Response({"error": "Base64 image is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
+            # Extract Base64 part by removing the MIME type prefix
+            base64_str = request.data['image']
+            if base64_str.startswith("data:image"):
+                base64_str = base64_str.split(",")[1] 
+
             # Decode Base64 image
-            image_data = base64.b64decode(request.data['image'])
+            image_data = base64.b64decode(base64_str)
             image = Image.open(BytesIO(image_data))
             image_array = process_image(image)
 
@@ -66,7 +71,7 @@ def florai(request):
 
             # Prepare data for serializer
             prediction_data = {
-                "image": request.data['image'],  # Store Base64 string
+                "image": request.data['image'],  # Store Base64 string including MIME type
                 "predict_class": predicted_class,
                 "predict_accuracy": confidence,
                 "predicted": True
