@@ -64,16 +64,26 @@ def florai(request):
             predicted_class = CLASS_NAMES[np.argmax(predictions)]
             confidence = int(np.max(predictions) * 100)
 
-            # Save prediction to the database
-            model_instance = modelpredict.objects.create(
-                image=request.data['image'],  # Store Base64 string instead of file
-                predict_class=predicted_class,
-                predict_accuracy=confidence,
-                predicted=True
-            )
+            # Prepare data for serializer
+            prediction_data = {
+                "image": request.data['image'],  # Store Base64 string
+                "predict_class": predicted_class,
+                "predict_accuracy": confidence,
+                "predicted": True
+            }
 
-            serializer = predictserializer(model_instance)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            # Serialize and save
+            serializer = predictserializer(data=prediction_data)
+            if serializer.is_valid():
+                model_instance = serializer.save()
+
+                # Return serialized data with Base64 image
+                response_data = serializer.data
+                response_data["image"] = request.data['image']  # Include Base64 image in response
+
+                return Response(response_data, status=status.HTTP_201_CREATED)
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
