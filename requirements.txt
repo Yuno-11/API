@@ -46,3 +46,4 @@ wrapt
 gunicorn
 djangorestframework
 Pillow
+drf-extra-fields

@@ -1,12 +1,19 @@
 from rest_framework import serializers
 from .models import modelpredict, esp32_data
+from drf_extra_fields.fields import Base64ImageField
 
 class predictserializer(serializers.ModelSerializer):
-    image = serializers.ImageField()
+    image = Base64ImageField()
 
     class Meta:
         model = modelpredict
         fields = ['pk', 'image', 'predict_class', 'predict_accuracy', 'predicted']
+
+    def create(self, validated_data):
+        print(f"Validated Data Before Saving: {validated_data}")  # Debug
+        instance = modelpredict.objects.create(**validated_data)
+        print(f"Created Instance: {instance}")  # Debug
+        return instance
 
 class ESP32Serializer(serializers.ModelSerializer):
     class Meta:
