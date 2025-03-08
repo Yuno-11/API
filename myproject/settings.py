@@ -29,7 +29,7 @@ SECRET_KEY = 'django-insecure-1j7#aqetq1^i*i(u(h-f7a9ag!(w@1*xtbks%7d12%tg4vd!h!
 DEBUG = True
 
 ALLOWED_HOSTS = ['myapi-production-566f.up.railway.app', 'localhost', '127.0.0.1']
-CSRF_TRUSTED_ORIGINS = ['myapi-production-566f.up.railway.app', 'localhost', '127.0.0.1']
+CSRF_TRUSTED_ORIGINS = ['https://myapi-production-566f.up.railway.app/', 'localhost', '127.0.0.1']
 
 # Application definition
 
