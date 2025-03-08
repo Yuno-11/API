@@ -1,9 +1,7 @@
 from rest_framework import serializers
 from .models import modelpredict, esp32_data
-from drf_extra_fields.fields import Base64ImageField
 
 class predictserializer(serializers.ModelSerializer):
-    image = Base64ImageField()
 
     class Meta:
         model = modelpredict
