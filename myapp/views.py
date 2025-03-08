@@ -37,9 +37,9 @@ def convert_bytea_to_image(bytea_data):
 
 # Read Image for Direct Upload & ESP32 Processing
 def process_image(image) -> np.ndarray:
-    image = image.resize((256, 256))  # Standard resizing
-    image = np.array(image) / 255.0   # Convert to NumPy array & normalize
-    return np.expand_dims(image, axis=0)  # Add batch dimension
+    image = image.resize((256, 256))  
+    image = np.array(image) / 255.0   
+    return np.expand_dims(image, axis=0)  
 
 # API for Direct Image Uploads & Predictions
 @api_view(['GET', 'POST'])
@@ -61,17 +61,17 @@ def florai(request):
 
             # Decode Base64 image
             image_data = base64.b64decode(base64_str)
-            image = Image.open(BytesIO(image_data)).convert('RGB')  # Convert to RGB to avoid errors
-            image_array = np.array(image)  # Convert image to array for processing
+            image = Image.open(BytesIO(image_data)).convert('RGB')  
+            image_array = np.array(image)  
 
             # Make AI prediction
-            predictions = MODEL.predict(np.expand_dims(image_array, axis=0))  # Ensure correct shape
+            predictions = MODEL.predict(np.expand_dims(image_array, axis=0)) 
             predicted_class = CLASS_NAMES[np.argmax(predictions)]
             confidence = int(np.max(predictions) * 100) 
 
             # Prepare data for serializer
             prediction_data = {
-                "image": request.data['image'],  # Store Base64 string including MIME type
+                "image": request.data['image'], 
                 "predict_class": predicted_class,
                 "predict_accuracy": confidence,
                 "predicted": True
@@ -82,9 +82,9 @@ def florai(request):
             if serializer.is_valid():
                 model_instance = serializer.save()
 
-                # Return serialized data with Base64 image
+                # Return serialized data
                 response_data = serializer.data
-                response_data["image"] = request.data['image']  # Include Base64 image in response
+                response_data["image"] = request.data['image'] 
 
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
@@ -137,7 +137,7 @@ def florai_esp32(request):
             "id": image_id,
             "device_id": device_id,
             "email": email if email else None,
-            "image": image_base64,  # Return the image as Base64
+            "image": image_base64,  
             "class": predicted_class,
             "confidence": confidence,
             "predicted": True
