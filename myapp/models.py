@@ -11,7 +11,7 @@ class modelpredict(models.Model):
 class esp32_data(models.Model):
     device_id = models.CharField(max_length=100, unique=True)
     email = models.EmailField(blank=True, null=True)
-    image = models.ImageField(upload_to='esp32_images/', blank=True, null=True)
+    image = models.ImageField(upload_to='esp32_images/',default="")
     temperature = models.FloatField()
     humidity = models.FloatField()
     predict_class = models.CharField(max_length=50, blank=True, null=True)
