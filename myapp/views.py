@@ -53,15 +53,16 @@ def florai(request):
         # Deleted Code
 
             # Serialize and save
-            serializer = predictserializer(data=prediction_data)
+            serializer = predictserializer(data=request.data)
             if serializer.is_valid():
-                model_instance = serializer.save()
+                serializer.save()
+                # model_instance = serializer.save()
 
                 # Return serialized data
                 response_data = serializer.data
-                response_data["image"] = request.data['image'] 
+                # response_data["image"] = request.data['image'] 
 
-                return Response(response_data, status=status.HTTP_201_CREATED)
+                return Response(response.data, status=status.HTTP_201_CREATED)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
