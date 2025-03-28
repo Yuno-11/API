@@ -50,32 +50,7 @@ def florai(request):
         return Response(serializer.data)
 
     if request.method == 'POST':
-        if 'image' not in request.data:
-            return Response({"error": "Base64 image is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            # Extract Base64 part by removing the MIME type prefix
-            base64_str = request.data['image']
-            if base64_str.startswith("data:image"):
-                base64_str = base64_str.split(",")[1]  
-
-            # Decode Base64 image
-            image_data = base64.b64decode(base64_str)
-            image = Image.open(BytesIO(image_data)).convert('RGB')  
-            image_array = np.array(image)  
-
-            # Make AI prediction
-            predictions = MODEL.predict(np.expand_dims(image_array, axis=0)) 
-            predicted_class = CLASS_NAMES[np.argmax(predictions)]
-            confidence = int(np.max(predictions) * 100) 
-
-            # Prepare data for serializer
-            prediction_data = {
-                "image": request.data['image'], 
-                "predict_class": predicted_class,
-                "predict_accuracy": confidence,
-                "predicted": True
-            }
+        # Deleted Code
 
             # Serialize and save
             serializer = predictserializer(data=prediction_data)
@@ -89,9 +64,6 @@ def florai(request):
                 return Response(response_data, status=status.HTTP_201_CREATED)
 
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            return Response({"error": f"Failed to process image: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # API for Fetching & Processing ESP32 Images
