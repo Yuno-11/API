@@ -62,9 +62,9 @@ def florai(request):
                 response_data = serializer.data
                 # response_data["image"] = request.data['image'] 
 
-                return Response(response.data, status=status.HTTP_201_CREATED)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.data, status=status.HTTP_400_BAD_REQUEST)
 
 
 # API for Fetching & Processing ESP32 Images
