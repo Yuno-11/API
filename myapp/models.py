@@ -3,7 +3,7 @@ from django.db import models
 # Create your models here.
 
 class modelpredict(models.Model):
-    image_id = models.IntegerField()
+    image_id = models.CharField(max_length=100, default='no_id')
     image = models.TextField(max_length=100000000000000000)
     predict_class=models.TextField(max_length=100000000000000000,default='')
     predict_accuracy=models.IntegerField(default=0)
