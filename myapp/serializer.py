@@ -5,7 +5,7 @@ class predictserializer(serializers.ModelSerializer):
 
     class Meta:
         model = modelpredict
-        fields = ['pk', 'image', 'predict_class', 'predict_accuracy', 'predicted']
+        fields = ['image_id', 'pk', 'image', 'predict_class', 'predict_accuracy', 'predicted']
 
     def create(self, validated_data):
         print(f"Validated Data Before Saving: {validated_data}")  # Debug
