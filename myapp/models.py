@@ -1,7 +1,7 @@
 from django.db import models
 
 class modelpredict(models.Model):
-    image_id = models.CharField(max_length=100, default='no_id')
+    image_id = models.CharField(max_length=255, null=True,)
     image = models.TextField(max_length=100000000000000000)
     predict_class = models.TextField(max_length=100, default='')  # Stores class name
     predict_accuracy = models.IntegerField(default=0)  # Stores confidence (percentage)
