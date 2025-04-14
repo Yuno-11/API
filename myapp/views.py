@@ -1,16 +1,16 @@
 import os
 import numpy as np
+import base64
 from io import BytesIO
 from PIL import Image
 import tensorflow as tf
+from keras.utils import img_to_array # type: ignore
 import psycopg2
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
 from .models import modelpredict
 from .serializer import predictserializer
-import base64
-from keras.utils import load_img, img_to_array # type: ignore
 
 # Load Disease Detection Model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.h5")
@@ -26,16 +26,16 @@ CLASS_NAMES = ["Early Blight", "Late Blight", "Healthy"]
 LEAF_MODEL_PATH = os.path.join(os.path.dirname(__file__), "leaf_checker_model.h5")
 leaf_model = None
 try:
-    leaf_model = tf.keras.models.load_model(LEAF_MODEL_PATH)  # Ensure leaf_model is loaded here
+    leaf_model = tf.keras.models.load_model(LEAF_MODEL_PATH)
     print(f"Leaf checker model loaded from: {LEAF_MODEL_PATH}")
 except Exception as e:
     print(f"Error loading leaf checker model: {e}")
 leaf_classes = ["Potato Leaf"]
 
-# Function to check if image is a potato leaf
+# Function to check if the image is a potato leaf
 def is_potato_leaf(img_pil):
     img = img_pil.resize((128, 128))  # Resize for leaf model
-    img_array = img_to_array(img) / 255.0  # Updated to use img_to_array
+    img_array = img_to_array(img) / 255.0  # Normalize image
     img_array = np.expand_dims(img_array, axis=0)
 
     prediction = leaf_model.predict(img_array)[0]
@@ -55,41 +55,29 @@ def get_db_connection():
         port="56650"
     )
 
+# Convert base64 to image
 def base64_to_image(base64_string):
     image_data = base64.b64decode(base64_string)
     return Image.open(BytesIO(image_data)).convert("RGB")
 
+# Convert bytea to image
 def convert_bytea_to_image(bytea_data):
     return Image.open(BytesIO(bytea_data)).convert("RGB")
 
+# Process image for model prediction
 def process_image(image) -> np.ndarray:
     image = image.resize((256, 256))  # Resize image to model's expected input size
     image = np.array(image) / 255.0   # Normalize the image
     return np.expand_dims(image, axis=0)  # Add batch dimension
 
-def base64_to_image(base64_string):
-    """
-    Convert a base64 encoded string to a PIL Image object.
-
-    Args:
-        base64_string (str): The base64 encoded image string.
-
-    Returns:
-        PIL.Image.Image: The image object.
-    """
-    image_data = base64.b64decode(base64_string)
-    return Image.open(BytesIO(image_data)).convert("RGB")
-
+# Predict disease using the model
 def predict_disease(image_pil, model, class_names):
-    # Preprocess the image for disease model
-    img_resized = image_pil.resize((256, 256))  # Resize image to model's expected input size
+    img_resized = image_pil.resize((256, 256))  # Resize image for model input
     img_array = tf.keras.preprocessing.image.img_to_array(img_resized)  # Convert to array
     img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
     
-    # Predict disease class
     prediction = model.predict(img_array)
     
-    # Get predicted class and confidence
     predicted_class = class_names[np.argmax(prediction)]  # Class with highest probability
     confidence = int(np.max(prediction) * 100)  # Confidence as percentage
     
@@ -125,7 +113,7 @@ def florai(request):
                     "leaf_confidence": leaf_confidence
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Proceed with disease prediction using the new predict_disease function
+            # Proceed with disease prediction
             predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
 
             # Save the result to the database
@@ -168,7 +156,7 @@ def florai_esp32(request):
         image_base64 = base64.b64encode(image_bytea).decode('utf-8')
         image_pil = convert_bytea_to_image(image_bytea)
 
-        # Optional: Apply potato leaf check here if needed
+        # Check if it's a potato leaf
         predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
         if predicted_leaf_class != "Potato Leaf" or leaf_confidence < 60:
             cursor.execute("""
