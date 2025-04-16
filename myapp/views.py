@@ -187,6 +187,7 @@ def florai_esp32(request):
                 "predicted": True
             }
 
+
             serializer = ESP32DataSerializer(data=full_data)
             if serializer.is_valid():
                 serializer.save()
