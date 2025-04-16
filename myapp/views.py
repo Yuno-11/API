@@ -9,8 +9,8 @@ import psycopg2
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from rest_framework import status
-from .models import modelpredict
-from .serializer import predictserializer
+from .models import modelpredict, ESP32Data
+from .serializer import predictserializer, ESP32DataSerializer
 
 # Load Disease Detection Model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.h5")
@@ -110,8 +110,7 @@ def florai(request):
             if leaf_confidence < 60:
                 return Response({
                     "error": "The image is not a potato leaf.",
-                    "leaf_confidence": leaf_confidence
-                }, status=status.HTTP_400_BAD_REQUEST)
+                }, status=status.HTTP_201_CREATED)
 
             # Proceed with disease prediction
             predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
@@ -140,82 +139,61 @@ def florai(request):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # API for Fetching & Processing ESP32 Images
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 def florai_esp32(request):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    if request.method == 'GET':
+        data = ESP32Data.objects.all()
+        serializer = ESP32DataSerializer(data, many=True) 
+        return Response(serializer.data)
 
-        cursor.execute("SELECT id, device_id, email, image FROM esp32_images WHERE predicted = FALSE LIMIT 1;")
-        image_data = cursor.fetchone()
+    # Handle POST request to receive data from ESP32
+    if request.method == 'POST':
+        device_id = request.data.get('device_id')
+        plant_data = request.data.get('plant')
 
-        if not image_data:
-            return Response({"message": "No unprocessed images found"}, status=status.HTTP_200_OK)
+        if not device_id or not plant_data:
+            return Response({"error": "Device ID or plant data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
-        image_id, device_id, email, image_bytea = image_data
-        image_base64 = base64.b64encode(image_bytea).decode('utf-8')
-        image_pil = convert_bytea_to_image(image_bytea)
+        try:
+            # Extract image from plant data
+            image_data = plant_data.get('image')
+            if not image_data:
+                return Response({"error": "Image data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if it's a potato leaf
-        predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
-        if predicted_leaf_class != "Potato Leaf" or leaf_confidence < 60:
-            cursor.execute("""
-                UPDATE esp32_images
-                SET predict_class = %s,
-                    predict_accuracy = %s,
-                    predicted = TRUE,
-                    leaf_class = %s,
-                    leaf_confidence = %s
-                WHERE id = %s;
-            """, ("Not Potato Leaf", leaf_confidence, predicted_leaf_class, leaf_confidence, image_id))
-            conn.commit()
-            cursor.close()
-            conn.close()
-            return Response({
-                "id": image_id,
+            # Process the base64 image
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(';base64,')[-1]
+            image_pil = base64_to_image(image_data)
+
+            # Predict the disease using the model
+            predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
+
+            # Add prediction results to plant_data
+            plant_data["predict_class"] = predicted_class
+            plant_data["predict_accuracy"] = confidence
+            plant_data["predicted"] = True
+
+            # Build full payload
+            full_data = {
                 "device_id": device_id,
-                "email": email if email else None,
-                "image": image_base64,
-                "class": "Not Potato Leaf",
-                "confidence": leaf_confidence,
-                "leaf_class": predicted_leaf_class,
-                "leaf_confidence": leaf_confidence,
+                "plant": plant_data, 
                 "predicted": True
-            }, status=status.HTTP_200_OK)
+            }
 
-        # Run disease detection
-        image_processed = process_image(image_pil)
-        predictions = MODEL.predict(image_processed)
-        predicted_class = CLASS_NAMES[np.argmax(predictions)]
-        confidence = int(np.max(predictions) * 100)
+            serializer = ESP32DataSerializer(data=full_data)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({
+                    "predicted_class": predicted_class,
+                    "confidence": confidence,
+                    **serializer.data
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({"error": "Data Not Valid", "details": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        cursor.execute("""
-            UPDATE esp32_images
-            SET predict_class = %s,
-                predict_accuracy = %s,
-                predicted = TRUE,
-                leaf_class = %s,
-                leaf_confidence = %s
-            WHERE id = %s;
-        """, (predicted_class, confidence, predicted_leaf_class, leaf_confidence, image_id))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response({
-            "id": image_id,
-            "device_id": device_id,
-            "email": email if email else None,
-            "image": image_base64,
-            "class": predicted_class,
-            "confidence": confidence,
-            "leaf_class": predicted_leaf_class,
-            "leaf_confidence": leaf_confidence,
-            "predicted": True
-        }, status=status.HTTP_200_OK)
-
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # API for Handling Specific Predictions
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])

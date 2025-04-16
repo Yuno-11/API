@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.fields import JSONField
 
 class modelpredict(models.Model):
     image_id = models.CharField(max_length=255, null=True,)
@@ -7,15 +8,14 @@ class modelpredict(models.Model):
     predict_accuracy = models.IntegerField(default=0)  # Stores confidence (percentage)
     predicted = models.BooleanField(default=False)
 
-class esp32_data(models.Model):
+class ESP32Data(models.Model):
     device_id = models.CharField(max_length=100, unique=True)
-    email = models.EmailField(blank=True, null=True)
-    image = models.TextField(max_length=100000000000000000)
-    temperature = models.FloatField()
-    humidity = models.FloatField()
-    predict_class = models.CharField(max_length=50, blank=True, null=True)
-    predict_accuracy = models.IntegerField(blank=True, null=True)
-    predicted = models.BooleanField(default=False)
+    username = models.CharField(max_length=100, null=True, blank=True)
+    email = models.EmailField(null=True, blank=True)
+    user_password = models.CharField(max_length=100, null=True, blank=True)
+    plant = models.JSONField()
+    predicted = models.BooleanField(default=False)  # AI prediction status
+    timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"ESP32 Device {self.device_id}"
+        return f"{self.device_id} - {'Predicted' if self.predicted else 'Unpredicted'}"
