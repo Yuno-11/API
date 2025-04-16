@@ -164,7 +164,14 @@ def florai_esp32(request):
             if image_data.startswith('data:image'):
                 image_data = image_data.split(';base64,')[-1]
             image_pil = base64_to_image(image_data)
+            # Check if image is a potato leaf first
+            predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
 
+            if leaf_confidence < 60:
+                return Response({
+                    "error": "The image is not a potato leaf.",
+                }, status=status.HTTP_201_CREATED)
+            
             # Predict the disease using the model
             predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
 
