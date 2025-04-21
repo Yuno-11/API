@@ -146,6 +146,7 @@ def florai_esp32(request):
         serializer = ESP32DataSerializer(data, many=True) 
         return Response(serializer.data)
 
+
     # Handle POST request to receive data from ESP32
     if request.method == 'POST':
         device_id = request.data.get('device_id')
