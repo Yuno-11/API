@@ -139,15 +139,13 @@ def florai(request):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # API for Fetching & Processing ESP32 Images
-@api_view(['GET', 'POST'])
+@api_view(['GET', 'POST', 'PUT']) 
 def florai_esp32(request):
     if request.method == 'GET':
         data = ESP32Data.objects.all()
         serializer = ESP32DataSerializer(data, many=True) 
         return Response(serializer.data)
 
-
-    # Handle POST request to receive data from ESP32
     if request.method == 'POST':
         device_id = request.data.get('device_id')
         plant_data = request.data.get('plant')
@@ -156,38 +154,31 @@ def florai_esp32(request):
             return Response({"error": "Device ID or plant data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Extract image from plant data
             image_data = plant_data.get('image')
             if not image_data:
                 return Response({"error": "Image data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Process the base64 image
             if image_data.startswith('data:image'):
                 image_data = image_data.split(';base64,')[-1]
             image_pil = base64_to_image(image_data)
-            # Check if image is a potato leaf first
-            predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
 
+            predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
             if leaf_confidence < 60:
                 return Response({
                     "error": "The image is not a potato leaf.",
                 }, status=status.HTTP_201_CREATED)
             
-            # Predict the disease using the model
             predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
 
-            # Add prediction results to plant_data
             plant_data["predict_class"] = predicted_class
             plant_data["predict_accuracy"] = confidence
             plant_data["predicted"] = True
 
-            # Build full payload
             full_data = {
                 "device_id": device_id,
-                "plant": plant_data, 
+                "plant": plant_data,
                 "predicted": True
             }
-
 
             serializer = ESP32DataSerializer(data=full_data)
             if serializer.is_valid():
@@ -202,6 +193,30 @@ def florai_esp32(request):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    elif request.method == 'PUT':
+        device_id = request.data.get('device_id')
+        updated_plant_data = request.data.get('plant')
+
+        if not device_id or not updated_plant_data:
+            return Response({"error": "Device ID or plant data is missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            esp32_entry = ESP32Data.objects.get(device_id=device_id)
+
+            # Update fields
+            esp32_entry.plant = updated_plant_data
+            esp32_entry.predicted = updated_plant_data.get('predicted', esp32_entry.predicted)
+            esp32_entry.save()
+
+            serializer = ESP32DataSerializer(esp32_entry)
+            return Response({"message": "Data updated successfully", **serializer.data}, status=status.HTTP_200_OK)
+
+        except ESP32Data.DoesNotExist:
+            return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 # API for Handling Specific Predictions
