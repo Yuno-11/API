@@ -139,7 +139,7 @@ def florai(request):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # API for Fetching & Processing ESP32 Images
-@api_view(['GET', 'PUT'])
+@api_view(['GET', 'POST'])
 def florai_esp32(request):
     if request.method == 'GET':
         data = ESP32Data.objects.all()
