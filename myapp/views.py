@@ -163,29 +163,29 @@ def florai_esp32(request):
             image_pil = base64_to_image(image_data)
 
             predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
-            if leaf_confidence < 60:
-                return Response({
-                    "error": "The image is not a potato leaf.",
-                }, status=status.HTTP_201_CREATED)
-            
-            predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
-
-            plant_data["predict_class"] = predicted_class
-            plant_data["predict_accuracy"] = confidence
-            plant_data["predicted"] = True
+            leaf_confidence = float(leaf_confidence)
+            if leaf_confidence >= 60:
+                predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
+                confidence = float(confidence)
+                plant_data["predict_class"] = predicted_class
+                plant_data["predict_accuracy"] = confidence
+                plant_data["predicted"] = True
+            else:
+                plant_data["predict_class"] = "Not a potato leaf"
+                plant_data["predict_accuracy"] = leaf_confidence
+                plant_data["predicted"] = True
 
             full_data = {
                 "device_id": device_id,
                 "plant": plant_data,
-                "predicted": True
+                "predicted": plant_data["predicted"]
             }
 
             serializer = ESP32DataSerializer(data=full_data)
             if serializer.is_valid():
                 serializer.save()
                 return Response({
-                    "predicted_class": predicted_class,
-                    "confidence": confidence,
+                    "message": "Data saved",
                     **serializer.data
                 }, status=status.HTTP_201_CREATED)
             else:
@@ -193,6 +193,7 @@ def florai_esp32(request):
 
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
     elif request.method == 'PUT':
         device_id = request.data.get('device_id')
@@ -209,32 +210,28 @@ def florai_esp32(request):
             if image_data.startswith('data:image'):
                 image_data = image_data.split(';base64,')[-1]
             image_pil = base64_to_image(image_data)
-
-            # Potato leaf prediction
+            
             predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
-            if leaf_confidence < 0:
-                return Response({
-                    "error": "The image is not a potato leaf.",
-                }, status=status.HTTP_200_OK)
+            leaf_confidence = float(leaf_confidence)
+            if leaf_confidence >= 60:
+                predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
+                confidence = float(confidence)
+                updated_plant_data["predict_class"] = predicted_class
+                updated_plant_data["predict_accuracy"] = confidence
+                updated_plant_data["predicted"] = True
+            else:
+                updated_plant_data["predict_class"] = "Not a potato leaf"
+                updated_plant_data["predict_accuracy"] = leaf_confidence
+                updated_plant_data["predicted"] = True
 
-            # Disease prediction
-            predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
-
-            updated_plant_data["predict_class"] = predicted_class
-            updated_plant_data["predict_accuracy"] = confidence
-            updated_plant_data["predicted"] = True
-
-            # Update existing record
             esp32_entry = ESP32Data.objects.get(device_id=device_id)
             esp32_entry.plant = updated_plant_data
-            esp32_entry.predicted = True
+            esp32_entry.predicted = updated_plant_data["predicted"]
             esp32_entry.save()
 
             serializer = ESP32DataSerializer(esp32_entry)
             return Response({
-                "message": "Data updated with prediction successfully",
-                "predicted_class": predicted_class,
-                "confidence": confidence,
+                "message": "Data updated",
                 **serializer.data
             }, status=status.HTTP_200_OK)
 
@@ -242,6 +239,7 @@ def florai_esp32(request):
             return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
