@@ -107,7 +107,7 @@ def florai(request):
             # Check if image is a potato leaf first
             predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
 
-            if leaf_confidence < 60:
+            if leaf_confidence < 50:
                 return Response({
                     "error": "The image is not a potato leaf.",
                 }, status=status.HTTP_201_CREATED)
@@ -202,20 +202,47 @@ def florai_esp32(request):
             return Response({"error": "Device ID or plant data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            esp32_entry = ESP32Data.objects.get(device_id=device_id)
+            image_data = updated_plant_data.get('image')
+            if not image_data:
+                return Response({"error": "Image data is missing"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Update fields
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(';base64,')[-1]
+            image_pil = base64_to_image(image_data)
+
+            # Potato leaf prediction
+            predicted_leaf_class, leaf_confidence = is_potato_leaf(image_pil)
+            if leaf_confidence < 0:
+                return Response({
+                    "error": "The image is not a potato leaf.",
+                }, status=status.HTTP_200_OK)
+
+            # Disease prediction
+            predicted_class, confidence = predict_disease(image_pil, MODEL, CLASS_NAMES)
+
+            updated_plant_data["predict_class"] = predicted_class
+            updated_plant_data["predict_accuracy"] = confidence
+            updated_plant_data["predicted"] = True
+
+            # Update existing record
+            esp32_entry = ESP32Data.objects.get(device_id=device_id)
             esp32_entry.plant = updated_plant_data
-            esp32_entry.predicted = updated_plant_data.get('predicted', esp32_entry.predicted)
+            esp32_entry.predicted = True
             esp32_entry.save()
 
             serializer = ESP32DataSerializer(esp32_entry)
-            return Response({"message": "Data updated successfully", **serializer.data}, status=status.HTTP_200_OK)
+            return Response({
+                "message": "Data updated with prediction successfully",
+                "predicted_class": predicted_class,
+                "confidence": confidence,
+                **serializer.data
+            }, status=status.HTTP_200_OK)
 
         except ESP32Data.DoesNotExist:
             return Response({"error": "Device not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 
